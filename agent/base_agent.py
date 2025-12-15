@@ -1,116 +1,52 @@
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
-from enum import Enum, auto
+from agent.planner import Planner
+from agent.executor import Executor
+from agent.observer import Observer
+from tools.tool_registry import ToolRegistry
 
+from runtime.retry_policy import RetryPolicy
+from agent.self_reflection import SelfReflection
 
-class AgentState(Enum):
-    INIT = auto()
-    PLANNING = auto()
-    EXECUTING = auto()
-    OBSERVING = auto()
-    REFLECTING = auto()
-    DONE = auto()
-    FAILED = auto()
+from memory.short_term import ShortTermMemory
+class BaseAgent:
+    def __init__(self, llm_client, executor):
+        self.planner = Planner(llm_client)
+        self.executor = executor
+        self.observer = Observer()
+        self.reflector = SelfReflection()
+        self.memory = ShortTermMemory()
 
+    def run(self, goal: str):
+        plan = self.planner.create_plan(goal)
 
-class BaseAgent(ABC):
-    """
-    BaseAgent defines the deterministic agent loop.
-    All agents in this repo must inherit from this.
-    """
+        for step in plan.steps:
+            if step.action == "respond":
+                return {
+                    "status": "success",
+                    "final_answer": step.input.get("message")
+                }
 
-    def __init__(self, agent_id: str, max_steps: int = 10):
-        self.agent_id = agent_id
-        self.max_steps = max_steps
-        self.current_step = 0
+            execution = self.executor.execute(step)
+            observation = self.observer.observe(execution)
 
-        self.state: AgentState = AgentState.INIT
+            self.memory.add({
+                "step": step.action,
+                "observation": observation
+            })
 
-        self.plan: Optional[Dict[str, Any]] = None
-        self.last_action: Optional[Dict[str, Any]] = None
-        self.last_observation: Optional[Any] = None
+            if self.reflector.should_retry(observation):
+                plan = self.reflector.fix_plan(plan, observation)
+                return {
+                    "status": "retry",
+                    "reason": observation
+                }
 
-        self.final_result: Optional[Any] = None
-        self.error: Optional[str] = None
+            if step.action == "respond":
+                return {
+                    "status": "success",
+                    "final_answer": execution.get("result")
+                }
 
-    # -------------------------
-    # Abstract methods
-    # -------------------------
-
-    @abstractmethod
-    def plan_step(self) -> Dict[str, Any]:
-        """
-        Decide what to do next.
-        Must return a structured plan (dict).
-        """
-        pass
-
-    @abstractmethod
-    def execute_step(self, plan: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute the planned action.
-        Returns raw tool/action output.
-        """
-        pass
-
-    @abstractmethod
-    def observe_step(self, execution_result: Dict[str, Any]) -> Any:
-        """
-        Interpret execution output.
-        """
-        pass
-
-    @abstractmethod
-    def reflect_step(self) -> bool:
-        """
-        Decide whether:
-        - continue
-        - retry
-        - terminate
-        Return True if agent should continue, False if done.
-        """
-        pass
-
-    # -------------------------
-    # Core Agent Loop
-    # -------------------------
-
-    def run(self) -> Any:
-        """
-        Main agent loop.
-        """
-        try:
-            self.state = AgentState.PLANNING
-
-            while self.current_step < self.max_steps:
-                self.current_step += 1
-
-                # ---- PLAN ----
-                self.state = AgentState.PLANNING
-                self.plan = self.plan_step()
-
-                # ---- EXECUTE ----
-                self.state = AgentState.EXECUTING
-                self.last_action = self.execute_step(self.plan)
-
-                # ---- OBSERVE ----
-                self.state = AgentState.OBSERVING
-                self.last_observation = self.observe_step(self.last_action)
-
-                # ---- REFLECT ----
-                self.state = AgentState.REFLECTING
-                should_continue = self.reflect_step()
-
-                if not should_continue:
-                    self.state = AgentState.DONE
-                    return self.final_result
-
-            # Max steps exceeded
-            self.state = AgentState.FAILED
-            self.error = "Max steps exceeded"
-            return None
-
-        except Exception as e:
-            self.state = AgentState.FAILED
-            self.error = str(e)
-            return None
+        return {
+            "status": "incomplete",
+            "memory": self.memory.dump()
+        }
