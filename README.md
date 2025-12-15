@@ -71,58 +71,6 @@ There is:
 Every step is explicit, logged, and debuggable.
 
 ---
-
-## 📁 Repository Structure
-
-agentic-ai-core/
-│
-├── main.py # Entry point (runs the agent)
-│
-├── agent/ # Core agent logic
-│ ├── base_agent.py # THE agent loop
-│ ├── states.py # Explicit agent states
-│ ├── planner.py # Planning via LLM
-│ ├── executor.py # Tool execution
-│ ├── observer.py # Tool output interpretation
-│ └── self_reflection.py # Retry & correction logic
-│
-├── llm/ # LLM interface
-│ ├── client.py # LLM wrapper
-│ ├── schemas.py # Strict JSON schemas
-│ └── prompts/ # Prompt templates
-│
-├── tools/ # Deterministic tools
-│ ├── base_tool.py
-│ ├── log_search.py
-│ ├── metrics_fetch.py
-│ └── tool_registry.py
-│
-├── memory/ # Agent memory
-│ ├── short_term.py
-│ ├── episodic.py
-│ └── memory_store.py
-│
-├── runtime/ # Execution control
-│ ├── state_machine.py
-│ ├── retry_policy.py
-│ └── safeguards.py
-│
-├── telemetry/ # Observability
-│ ├── logger.py
-│ ├── traces.py
-│ └── events.py
-│
-├── data/ # Synthetic datasets
-│ ├── incidents.json
-│ ├── logs.json
-│ └── metrics.json
-│
-└── tests/
-└── test_agent_loop.py
-
-
----
-
 ## 🧪 Data & Dependencies
 
 ### APIs
